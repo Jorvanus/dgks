@@ -38,6 +38,17 @@ local function isSecret(v)
 	return issecretvalue ~= nil and issecretvalue(v) == true
 end
 
+-- WoW Forever returns an empty realm, so a name can arrive as "Name-" with a dangling hyphen.
+-- Drop that so a bare "Name" and "Name-" compare as the same character.
+local function stripEmptyRealm(name)
+	if type(name) ~= "string" then return name end
+	return (name:gsub("%-$", ""))
+end
+
+local function isPlayer(name)
+	return stripEmptyRealm(name) == playerName
+end
+
 function sortListByLength(t,a,b)
 	local acount, bcount = 0,0
 	for _ in pairs(t[a]) do acount = acount + 1 end
@@ -1637,7 +1648,7 @@ end
 function dgks:OnCommReceived(cchan, message, distribution, sender)
 	
 	--If broadcast type is off return
-	if not dgks.db.profile.dobroadcasts and sender ~= playerName then return end
+	if not dgks.db.profile.dobroadcasts and not isPlayer(sender) then return end
 	-- If Guild broadcast is off and we received a guild broadcast just return
 	if not dgks.db.profile.doguild and distribution == "GUILD" then return end
 	-- If raid broadcast is off and we received a raid broadcast just return
@@ -1652,7 +1663,7 @@ function dgks:OnCommReceived(cchan, message, distribution, sender)
 	self:Print("OnCommReceived: CChan= " .. cchan .. " " .. message .. distribution .. sender)
 	--@end-debug@
 	if cchan == "dgksVR" then
-		if sender ~= playerName then self:Print(sender .. " is on version " .. message) end
+		if not isPlayer(sender) then self:Print(sender .. " is on version " .. message) end
 
 	elseif cchan == "dgksV" then
 		-- Check for duplicates here
@@ -1953,7 +1964,10 @@ function dgks:SendCM(cchan,msg)
 			for i = 1, onlineBFriends  do
 				for j = 1, C_BattleNet.GetFriendNumGameAccounts(i) do
 					local game = C_BattleNet.GetFriendGameAccountInfo(i, j)
-					if game.characterName == nil or game.realmName == nil or game.factionName == nil then
+					-- WoW Forever returns an empty realmName instead of nil. Without a realm we cannot tell
+					-- whether this friend is on our realm, and a whisper to a bare name on another realm
+					-- prints "No player named ... is currently playing." So skip friends with no realm info.
+					if game.characterName == nil or game.realmName == nil or game.realmName == "" or game.factionName == nil then
 						break
 					end
 							--@debug@
